@@ -65,15 +65,71 @@ set(
   "${CMAKE_CURRENT_SOURCE_DIR}/libfsps/src/ztinterp.f90"
 )
 
+if(WIN32)
+  message(STATUS "Fixing Windows path separators...")
+  
+  # 修复 FSPS_SOURCES 列表中的所有路径
+  set(FSPS_SOURCES_FIXED "")
+  foreach(src ${FSPS_SOURCES})
+    file(TO_CMAKE_PATH "${src}" src_fixed)
+    list(APPEND FSPS_SOURCES_FIXED "${src_fixed}")
+  endforeach()
+  set(FSPS_SOURCES ${FSPS_SOURCES_FIXED})
+  
+  # 修复 F2PY 生成的文件路径
+  if(DEFINED F2PY_MODULE_C)
+    file(TO_CMAKE_PATH "${F2PY_MODULE_C}" F2PY_MODULE_C)
+  endif()
+  
+  if(DEFINED F2PY_WRAPPER_F90)
+    file(TO_CMAKE_PATH "${F2PY_WRAPPER_F90}" F2PY_WRAPPER_F90)
+  endif()
+  
+  if(DEFINED FORTRANOBJECT_C)
+    file(TO_CMAKE_PATH "${FORTRANOBJECT_C}" FORTRANOBJECT_C)
+  endif()
+  
+  message(STATUS "Path fixing completed")
+endif()
+
 # Define the Python library
-python_add_library(
-  _fsps
-  MODULE
-  "${CMAKE_CURRENT_SOURCE_DIR}/fsps.f90"
-  ${FSPS_SOURCES}
-  ${F2PY_SOURCES}
-  "${F2PY_INCLUDE_DIR}/fortranobject.c"
-  WITH_SOABI)
+if(WIN32)
+  message(STATUS "Using Windows-specific library creation...")
+  
+  # 收集所有源文件
+  set(ALL_SOURCES
+    ${FSPS_SOURCES}
+    ${F2PY_MODULE_C}
+    ${F2PY_WRAPPER_F90}
+    ${FORTRANOBJECT_C}
+  )
+  
+  # 使用 add_library 替代 python_add_library
+  add_library(_fsps MODULE ${ALL_SOURCES})
+  
+  # 设置模块属性
+  set_target_properties(_fsps PROPERTIES
+    PREFIX ""
+    SUFFIX ".pyd"
+    OUTPUT_NAME "_fsps"
+  )
+  
+  # 链接 Python 库
+  target_link_libraries(_fsps PRIVATE Python::Module Python::NumPy)
+  
+  # 安装目标
+  install(TARGETS _fsps LIBRARY DESTINATION ${SKBUILD_PROJECT_NAME})
+  
+else()
+  # 非 Windows 系统使用原来的方式
+  python_add_library(_fsps MODULE
+    ${FSPS_SOURCES}
+    ${F2PY_MODULE_C}
+    ${F2PY_WRAPPER_F90}
+    ${FORTRANOBJECT_C}
+    WITH_SOABI
+  )
+endif()
 target_link_libraries(_fsps PUBLIC Python::NumPy)
 target_include_directories(_fsps PUBLIC "${F2PY_INCLUDE_DIR}")
 install(TARGETS _fsps DESTINATION ${SKBUILD_PROJECT_NAME})
